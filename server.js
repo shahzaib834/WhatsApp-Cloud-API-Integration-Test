@@ -1,36 +1,56 @@
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
-const util = require('util');
+const fs = require('fs');
+const csvParser = require('csv-parser');
+const multer = require('multer');
 
 const app = express();
 
 // Define your predefined templates
-const templates = {
-  greeting: {
-    templateName: 'greeting',
-    templateBody: 'Welcome to our chatbot! How can I assist you today?',
-  },
-  orderStatus: {
-    templateName: 'order_status',
-    templateBody: 'Your order status is: {{orderStatus}}',
-  },
-  shippingDetails: {
-    templateName: 'shipping_details',
-    templateBody:
-      'Your shipping details are as follows:\nAddress: {{address}}\nCity: {{city}}\nCountry: {{country}}',
-  },
-  developer: {
-    templateName: 'developer',
-    templateBody: 'I am owned by SHAHZAIB',
-  },
-};
+// const templates = {
+//   greeting: {
+//     templateName: 'greeting',
+//     templateBody: 'Welcome to our chatbot! How can I assist you today?',
+//   },
+//   orderStatus: {
+//     templateName: 'order_status',
+//     templateBody: 'Your order status is: {{orderStatus}}',
+//   },
+//   shippingDetails: {
+//     templateName: 'shipping_details',
+//     templateBody:
+//       'Your shipping details are as follows:\nAddress: {{address}}\nCity: {{city}}\nCountry: {{country}}',
+//   },
+//   developer: {
+//     templateName: 'developer',
+//     templateBody: 'I am owned by SHAHZAIB',
+//   },
+// };
 
 // Handle incoming WhatsApp messages
 app.use(express.json());
 
+var storage = multer.diskStorage(
+  {
+      destination: './uploads/',
+      filename: function ( req, file, cb ) {
+          //req.body is empty...
+          //How could I get the new_file_name property sent from client here?
+          cb( null, file.originalname);
+      }
+  }
+);
+
+const upload = multer({ storage: storage });
+
+
 app.get('/', (req, res) => {
   res.send('app is running');
+});
+
+app.post('/file', upload.single('file'), async (req, res) => {
+  return res.status(200).send();
 });
 
 app.get('/webhook', (req, res) => {
@@ -52,6 +72,18 @@ app.post('/webhook', (req, res) => {
   // req.body.entry[0].changes[0].value.messages[0].id - message id
   // req.body.entry[0].changes[0].value.messages[0].text.body - message text
 
+
+  const result = [];
+
+  fs.createReadStream(`./uploads/questions.csv`)
+    .pipe(csvParser())
+    .on('data', (data) => {
+      result.push(data);
+    })
+    .on('end', () => {
+      console.log(result);
+    });
+
   if (req.body.entry.length) {
     const baseVariable = req.body.entry[0].changes[0].value.messages[0];
     //const senderName = baseVariable.profile.name;
@@ -59,21 +91,32 @@ app.post('/webhook', (req, res) => {
     const body = baseVariable.text.body;
     let response;
 
-    if (body.toLowerCase().includes('order status')) {
-      response = fillTemplate(templates.orderStatus.templateBody, {
-        orderStatus: 'In progress',
-      });
-    } else if (body.toLowerCase().includes('shipping details')) {
-      response = fillTemplate(templates.shippingDetails.templateBody, {
-        address: '123 Main St',
-        city: 'Exampleville',
-        country: 'Exampleland',
-      });
-    } else if (body.toLowerCase().includes('made you')) {
-      response = templates.developer.templateBody;
-    } else {
-      response = templates.greeting.templateBody;
+    for(let i=0; i<result.length; i++) {
+      if (response) break;
+
+      if (body.toLowerCase().includes(result[i].Questions)) {
+        response = fillTemplate(result[i].Templates);
+      } else {
+        response = fillTemplate('Not available right now! text me later!')
+      }
+
     }
+
+    // if (body.toLowerCase().includes('order status')) {
+    //   response = fillTemplate(templates.orderStatus.templateBody, {
+    //     orderStatus: 'In progress',
+    //   });
+    // } else if (body.toLowerCase().includes('shipping details')) {
+    //   response = fillTemplate(templates.shippingDetails.templateBody, {
+    //     address: '123 Main St',
+    //     city: 'Exampleville',
+    //     country: 'Exampleland',
+    //   });
+    // } else if (body.toLowerCase().includes('made you')) {
+    //   response = templates.developer.templateBody;
+    // } else {
+    //   response = templates.greeting.templateBody;
+    // }
 
     sendWhatsAppMessage(from, response)
       .then(() => {

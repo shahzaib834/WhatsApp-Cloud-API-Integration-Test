@@ -1,0 +1,5 @@
+Questions,Templates
+greeting,Welcome to our chatbot! How can I assist you today?
+order status,Your order status is: {{orderStatus}}
+shipping details,Your shipping details are as follows:\nAddress: {{address}}\nCity: {{city}}\nCountry: {{country}}
+test,test
